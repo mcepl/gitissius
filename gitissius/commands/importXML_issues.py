@@ -94,10 +94,7 @@ class Command(commands.GitissiusCommand):
                              'reported_from', 'assigned_to', 'created_on',
                              'updated_on', 'status', 'description' ]
         """
-        # from gitissius.database import Issue
-        #in_file_name = args[0]
-        in_file_name = "/home/matej/archiv/2012/projekty/" + \
-            "github-issues-export/issues.xml"
+        in_file_name = args[0]
 
         issue_XML = et.iterparse(in_file_name)
 
