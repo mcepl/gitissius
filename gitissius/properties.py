@@ -198,14 +198,16 @@ class Option(DbProperty):
 
         return True
 
+
 class Description(DbProperty):
     """
     DescriptionProperty
     """
     def printme(self):
-        print "%s:\n  %s" % (self.repr('repr_name'),
-                             self.repr('value').replace('\n', '\n  ')
-                             )
+        value = self.repr('value')
+        if isinstance(value, basestring):
+            value = value.replace('\n', '\n  ')
+        print "%s:\n  %s" % (self.repr('repr_name'), value)
 
     @common.disable_colorama
     def interactive_edit(self, default=None):

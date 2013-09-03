@@ -3,7 +3,34 @@ from gitissius.database import Issue, Comment
 import gitissius.common as common
 from xml.etree import ElementTree as et
 import dateutil.parser
+import dateutil.tz
+import datetime
 import logging
+
+# BE: ("target", "wishlist", "minor", "serious", "critical",
+#      "fatal")
+# GI: ('high', 'medium', 'low')
+SEVERITY_MAP = {
+    'target': 'low',
+    'wishlist': 'low',
+    'minor': 'low',
+    'serious': 'medium',
+    'critical': 'high',
+    'fatal': 'high'
+}
+
+# BE: ("unconfirmed", "open", "assigned", "test", "closed",
+# "fixed", "wontfix")
+# GI: ('new', 'assigned', 'invalid', 'closed")
+STATUS_MAP = {
+    'unconfirmed': 'new',
+    'open': 'new',
+    'assigned': 'assigned',
+    'test': 'assigned',
+    'closed': 'closed',
+    'fixed': 'closed',
+    'wontfix': 'invalid'
+}
 
 
 class Command(commands.GitissiusCommand):
@@ -17,83 +44,84 @@ class Command(commands.GitissiusCommand):
     def __init__(self):
         super(Command, self).__init__()
 
-    def __map_property(self, prop):
-        if prop.tag == "short-name":
-            return None, None  # git ID
-
-        elif prop.tag == "summary":
-            return 'title', prop.text
-
-        elif prop.tag == "severity":
-            # BE: ("target", "wishlist", "minor", "serious", "critical",
-            #      "fatal")
-            # GI: ('high', 'medium', 'low')
-            SEVERITY_MAP = {
-                'target': 'low',
-                'wishlist': 'low',
-                'minor': 'low',
-                'serious': 'medium',
-                'critical': 'high',
-                'fatal': 'high'
-            }
-            return 'severity', SEVERITY_MAP[prop.text]
-
-        elif prop.tag == "status":
-            # BE: ("unconfirmed", "open", "assigned", "test", "closed",
-            # "fixed", "wontfix")
-            # GI: ('new', 'assigned', 'invalid', 'closed")
-            STATUS_MAP = {
-                'unconfirmed': 'new',
-                'open': 'new',
-                'assigned': 'assigned',
-                'test': 'assigned',
-                'closed': 'closed',
-                'fixed': 'closed',
-                'wontfix': 'invalid'
-            }
-            return 'status', STATUS_MAP[prop.text]
-
-        elif prop.tag == "reporter":
-            return 'reported_from', prop.text
-
-        elif prop.tag == "creator":
-            return None, None  # doesn't seem to exist
-
-        elif prop.tag == "created":
+    def __map_property(self, prop, last_update=None):
+        PROP_MAP = {
+            "short-name": None,  # git ID
+            "summary": 'title',
+            "severity": 'severity',
+            "status": 'status',
+            "reporter": 'reported_from',
+            "creator": None,  # doesn't seem to exist
             # <created>Mon, 12 Aug 2013 11:01:54 +0000</created>
-            return 'created_on', dateutil.parser.parse(prop.text)
+            "created": 'created_on'
+        }
 
-    def __parse_comment(self, inElem):
+        logging.debug("%s\nprop = %s",
+                      '=' * 30, et.tostring(prop))
+
+        key = None
+        if prop.tag in PROP_MAP:
+            key = PROP_MAP[prop.tag]
+
+        if key is None:
+            return None
+
+        if key == 'severity':
+            value = SEVERITY_MAP[prop.text]
+        elif key == 'status':
+            value = STATUS_MAP[prop.text]
+        elif key == 'created_on':
+            value = dateutil.parser.parse(prop.text) \
+                if prop.text is not None else \
+                datetime.datetime(1970, 1, 1,
+                                  0, 0, 0, 0, dateutil.tz.tzutc())
+        else:
+            value = prop.text if prop.text is not None else ''
+
+        return key, value
+
+    @staticmethod
+    def __parse_comment(inElem):
         out = {}
+        PROP_MAP = {
+            "author": "reported_from",
+            "date": 'created_on',
+            "body": 'description'
+        }
+
         for child in inElem.findall("*"):
-            if child.tag == 'author':
-                out['reported_from'] = child.text
-            elif child.tag == 'date':
-                out['created_on'] = dateutil.parser.parse(child.text)
-            elif child.tag == 'body':
-                out['description'] = child.text
+            if child.tag in PROP_MAP:
+                key = PROP_MAP[child.tag]
+            else:
+                key = None
+
+            if key == 'created_on':
+                value = dateutil.parser.parse(child.text) \
+                    if child.text is not None else \
+                    datetime.datetime(1970, 1, 1,
+                                      0, 0, 0, 0, dateutil.tz.tzutc())
+            else:
+                value = child.text if child.text is not None else ''
+
+            if key is not None:
+                out[key] = value
 
         return out
 
     def __parse_bug(self, inElem):
-        out = {  # some default values
-            'type': 'bug'
-        }
+        out = {}
 
         for prop in inElem.findall('*'):
-                value = self.__map_property(prop)
-                if value is not None and value[0] is not None:
-                    out[value[0]] = value[1]
+            value = self.__map_property(prop)
+            if value is not None and value[0] is not None:
+                out[value[0]] = value[1]
+
+        out['updated_on'] = out.get('created_on')
 
         logging.debug("out = %s", out)
         return out
 
     def _execute(self, options, args):
-        """
-        self._print_order = ['id', 'title', 'type', 'severity',
-                             'reported_from', 'assigned_to', 'created_on',
-                             'updated_on', 'status', 'description' ]
-        """
         in_file_name = args[0]
 
         issue_XML = et.iterparse(in_file_name)
@@ -103,8 +131,19 @@ class Command(commands.GitissiusCommand):
                 logging.debug("elem = %s", et.tostring(elem))
                 issue = Issue.load(self.__parse_bug(elem))
                 for child in elem.findall("comment"):
+                    comment = self.__parse_comment(child)
+                    issue_time = issue.get_property('updated_on')
+                    try:
+                        issue_time.set_value(max(comment['created_on'],
+                                             issue_time.value))
+                    except ValueError:
+                        logging.debug("comment['created_on'] = %s",
+                                      comment['created_on'])
+                        logging.debug("issue_time.value = %s",
+                                      issue_time.value)
+                        raise
                     issue._comments.append(
-                        Comment.load(self.__parse_comment(child)))
+                        Comment.load(comment))
 
                 # add to repo
                 common.git_repo[issue.path] = issue.serialize(indent=4)
