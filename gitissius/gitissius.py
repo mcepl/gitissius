@@ -9,29 +9,22 @@
 # Distributed bug tracking using git
 #
 
-import optparse
-import os
-import os.path
 import re
-import shutil
 import sys
-import string
-import locale
 import logging
 logging.basicConfig(format='%(levelname)s:%(funcName)s:%(message)s',
-        level=logging.INFO)
+                    level=logging.INFO)
+import locale
 
 import gitshelve
 import common
 import commands
-import properties
-import database
 
 VERSION = "0.1.6"
+locale.setlocale(locale.LC_ALL, "")
 
-locale.setlocale(locale.LC_ALL)
 
-def usage(available_commands):
+def usage():
     USAGE = "Gitissius v%s\n\n" % VERSION
     USAGE += "Available commands: \n"
 
@@ -43,6 +36,7 @@ def usage(available_commands):
                         ', '.join(_cmd.aliases) or 'None')
 
     return USAGE
+
 
 def initialize():
     commands.import_commands()
@@ -63,7 +57,8 @@ def initialize():
     if not 'gitissius' in gitshelve.git('branch'):
         # no local gitissius branch exists
         # check if there is a remote
-        remotes = re.findall("remotes/(.*)/gitissius", gitshelve.git('branch', '-a'))
+        remotes = re.findall("remotes/(.*)/gitissius",
+                             gitshelve.git('branch', '-a'))
 
         if len(remotes) == 1:
             # create a local copy
@@ -71,14 +66,16 @@ def initialize():
 
         elif len(remotes) > 1:
             # multiple remote branches exist
-            print "Multiple remote gitissius branches exist, please run one of the following commands:"
+            print "Multiple remote gitissius branches exist, " + \
+                  "please run one of the following commands:"
             for r in remotes:
                 print "   git branch gitissius " + r + "/gitissius"
             sys.exit(1)
 
         else:
             # save current branch name
-            branch = gitshelve.git('name-rev', '--name-only', 'HEAD') or 'master'
+            branch = gitshelve.git('name-rev', '--name-only', 'HEAD') \
+                or 'master'
 
             # stash changes
             try:
@@ -91,7 +88,8 @@ def initialize():
             gitshelve.git('symbolic-ref', 'HEAD', 'refs/heads/gitissius')
             # remove all tracked files, but keep untracked ones
             gitshelve.git('rm', '--ignore-unmatch', '-rf', '*')
-            gitshelve.git('commit', '--allow-empty', '-m', 'Initialization of gitissius')
+            gitshelve.git('commit', '--allow-empty', '-m',
+                          'Initialization of gitissius')
             gitshelve.git('checkout', branch)
 
             try:
@@ -103,8 +101,10 @@ def initialize():
         # open the repo now, since init was done
         common.git_repo = gitshelve.open(branch='gitissius')
 
+
 def close():
     common.git_repo.close()
+
 
 def main():
     initialize()
@@ -114,7 +114,7 @@ def main():
 
     except IndexError:
         # no command given
-        print usage(commands.available_commands)
+        print usage()
         sys.exit()
 
     try:
@@ -123,9 +123,9 @@ def main():
 
         commands.command[command](sys.argv[2:])
 
-    except common.InvalidCommand, e :
+    except common.InvalidCommand, e:
         print " >", "Invalid command '%s'" % e.command
-        print usage(commands.available_commands)
+        print usage()
 
     except common.IssueIDConflict, error:
         print " >", "Error: Conflicting IDs"

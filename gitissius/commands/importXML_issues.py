@@ -5,6 +5,7 @@ from xml.etree import ElementTree as et
 import dateutil.parser
 import dateutil.tz
 import datetime
+import os
 import logging
 
 # BE: ("target", "wishlist", "minor", "serious", "critical",
@@ -83,6 +84,7 @@ class Command(commands.GitissiusCommand):
     @staticmethod
     def __parse_comment(inElem):
         out = {}
+        logging.debug("inElem:\n%s", et.tostring(inElem))
         PROP_MAP = {
             "author": "reported_from",
             "date": 'created_on',
@@ -106,6 +108,7 @@ class Command(commands.GitissiusCommand):
             if key is not None:
                 out[key] = value
 
+        logging.debug("out = %s", out)
         return out
 
     def __parse_bug(self, inElem):
@@ -123,6 +126,8 @@ class Command(commands.GitissiusCommand):
 
     def _execute(self, options, args):
         in_file_name = args[0]
+        logging.debug("in_file_name = %s", in_file_name)
+        logging.debug("cwd = %s", os.curdir)
 
         issue_XML = et.iterparse(in_file_name)
 
@@ -142,8 +147,11 @@ class Command(commands.GitissiusCommand):
                         logging.debug("issue_time.value = %s",
                                       issue_time.value)
                         raise
-                    issue._comments.append(
-                        Comment.load(comment))
+                    logging.debug("BEFORE issue._comments = %s",
+                                  issue._comments)
+                    issue._comments.append(Comment.load(comment))
+                    logging.debug("AFTER issue._comments = %s",
+                                  issue._comments)
 
                 # add to repo
                 common.git_repo[issue.path] = issue.serialize(indent=4)
