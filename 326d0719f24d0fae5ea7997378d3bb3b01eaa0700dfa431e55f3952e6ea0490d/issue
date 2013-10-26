@@ -1,0 +1,12 @@
+{
+    "status": "closed", 
+    "severity": "low", 
+    "title": "1.0", 
+    "reported_from": "Mat\u011bj Cepl <mcepl@redhat.com>", 
+    "created_on": "2010-06-24T22:19:20+00:00", 
+    "assigned_to": null, 
+    "updated_on": "2010-06-24T22:19:20+00:00", 
+    "type": "bug", 
+    "id": "326d0719f24d0fae5ea7997378d3bb3b01eaa0700dfa431e55f3952e6ea0490d", 
+    "description": null
+}
